@@ -6,7 +6,7 @@ Upload images and get results with detailed analysis
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageOps
 import cv2
 from ultralytics import YOLO
 from deepface import DeepFace
@@ -37,26 +37,23 @@ class ComputerVisionGUI:
         
     def setup_styles(self):
         """Setup color scheme and fonts"""
-        # Modern, accessible dark palette
         self.colors = {
-            'bg_dark': '#0b1b2b',       # deep navy
-            'bg_medium': '#112936',     # slate blue
-            'bg_light': '#183343',      # muted slate
-            'accent': '#00b4d8',        # cyan accent
-            'success': '#4cd964',       # bright green
-            'warning': '#ffb86b',       # warm orange
-            'text': '#e6f6fb',          # off-white
-            'text_dim': '#9fb7c6'       # soft muted text
+            'bg_dark': '#1a1a1a',
+            'bg_medium': '#2d2d2d',
+            'bg_light': '#3d3d3d',
+            'accent': '#00d4ff',
+            'success': '#00ff88',
+            'text': '#ffffff',
+            'text_dim': '#b0b0b0'
         }
-
-        # Fonts tuned for clarity and cross-platform availability
+        
         self.fonts = {
-            'title': ('Segoe UI', 26, 'bold'),
-            'heading': ('Segoe UI', 16, 'bold'),
-            'button': ('Segoe UI', 13, 'bold'),
-            'text': ('Segoe UI', 12),
-            'small': ('Segoe UI', 11),
-            'mono': ('Consolas', 11)
+            'title': ('Segoe UI', 28, 'bold'),
+            'heading': ('Segoe UI', 14, 'bold'),
+            'button': ('Segoe UI', 12, 'bold'),
+            'text': ('Segoe UI', 11),
+            'small': ('Segoe UI', 10),
+            'mono': ('Consolas', 10)
         }
     
     def setup_directories(self):
@@ -230,8 +227,8 @@ class ComputerVisionGUI:
         right_panel = tk.Frame(content_frame, bg=self.colors['bg_dark'])
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        # Top: Images (compact for more details space)
-        images_frame = tk.Frame(right_panel, bg=self.colors['bg_dark'], height=420)
+        # Top: Images (larger to fill frame)
+        images_frame = tk.Frame(right_panel, bg=self.colors['bg_dark'], height=500)
         images_frame.pack(fill=tk.X, pady=(0, 10))
         images_frame.pack_propagate(False)
         
@@ -252,7 +249,7 @@ class ComputerVisionGUI:
             fg=self.colors['text_dim'],
             font=self.fonts['text']
         )
-        self.input_image_label.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self.input_image_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Output image
         output_frame = tk.LabelFrame(
@@ -271,7 +268,7 @@ class ComputerVisionGUI:
             fg=self.colors['text_dim'],
             font=self.fonts['text']
         )
-        self.output_image_label.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self.output_image_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Bottom: Details (much larger)
         details_frame = tk.LabelFrame(
@@ -322,40 +319,25 @@ class ComputerVisionGUI:
             self.output_image_label.config(image='', text="Detection results will appear here\n\n🚀 Run detection to see results", bg=self.colors['bg_light'])
             self.details_text.delete(1.0, tk.END)
     
-    def display_image(self, image_path, label):
+    def display_image(self, image_path, label, is_output=False):
         """Display image in label"""
         try:
-            image = Image.open(image_path).convert("RGBA")
+            # Load image
+            image = Image.open(image_path)
 
-            # Target frame size (do not crop — letterbox to preserve full image)
-            max_w, max_h = (550, 480)
+            # Different sizes for input (smaller) vs output (larger)
+            if is_output:
+                # Output image - larger to show detection results clearly
+                max_w, max_h = 600, 500
+            else:
+                # Input image - smaller
+                max_w, max_h = 400, 450
 
-            # Original image size
-            orig_w, orig_h = image.size
+            # Resize to fit while preserving aspect ratio (no cropping)
+            image = ImageOps.contain(image, (max_w, max_h), Image.Resampling.LANCZOS)
 
-            # Compute scale to fit while preserving aspect ratio
-            scale = min(max_w / orig_w, max_h / orig_h, 1.0)
-            new_w = int(orig_w * scale)
-            new_h = int(orig_h * scale)
-
-            # Resize the image with high-quality resampling
-            resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-
-            # Create background (letterbox) using the frame background color
-            bg_hex = self.colors.get('bg_light', '#FFFFFF')
-            bg_rgb = tuple(int(bg_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            background = Image.new('RGBA', (max_w, max_h), bg_rgb + (255,))
-
-            # Paste centered
-            paste_x = (max_w - new_w) // 2
-            paste_y = (max_h - new_h) // 2
-            background.paste(resized, (paste_x, paste_y), resized)
-
-            # Convert to RGB for Tkinter and display
-            final_image = background.convert('RGB')
-            photo = ImageTk.PhotoImage(final_image)
-
-            label.config(image=photo, text="", bg=self.colors['bg_light'])
+            photo = ImageTk.PhotoImage(image)
+            label.config(image=photo, text="", bg=self.colors['bg_dark'], anchor='center')
             label.image = photo  # Keep reference
             
         except Exception as e:
@@ -420,7 +402,7 @@ class ComputerVisionGUI:
             self.current_output_path = str(output_path)
             
             # Display output
-            self.display_image(str(output_path), self.output_image_label)
+            self.display_image(str(output_path), self.output_image_label, is_output=True)
             
             # Get detections
             detections = results[0].boxes
@@ -525,7 +507,7 @@ class ComputerVisionGUI:
             self.current_output_path = str(output_path)
             
             # Display output
-            self.display_image(str(output_path), self.output_image_label)
+            self.display_image(str(output_path), self.output_image_label, is_output=True)
             
             self.log_status(f"✓ Found {len(results)} face(s)")
             

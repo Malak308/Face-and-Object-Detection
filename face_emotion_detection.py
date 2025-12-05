@@ -28,13 +28,11 @@ def detect_faces_and_emotions(image_path, output_path):
     print(f"{'='*50}")
     
     try:
-        # Analyze faces with DeepFace (optimized for speed)
+        # Analyze faces with DeepFace
         results = DeepFace.analyze(
             img_path=str(image_path),
-            actions=['emotion'],  # Only emotion analysis - much faster
-            enforce_detection=False,
-            detector_backend='opencv',  # Faster than default
-            silent=True
+            actions=['emotion', 'age', 'gender', 'race'],
+            enforce_detection=False
         )
         
         # Handle both single face and multiple faces
@@ -62,9 +60,16 @@ def detect_faces_and_emotions(image_path, output_path):
             dominant_emotion = result['dominant_emotion']
             emotion_score = emotions[dominant_emotion]
             
+            # Get other attributes
+            age = result['age']
+            gender = result['dominant_gender']
+            gender_score = result['gender'][gender]
+            
             # Print details
             print(f"\nFace {idx + 1}:")
             print(f"  Emotion: {dominant_emotion} ({emotion_score:.1f}%)")
+            print(f"  Age: ~{age} years")
+            print(f"  Gender: {gender} ({gender_score:.1f}%)")
             print(f"  All emotions:")
             for emotion, score in sorted(emotions.items(), key=lambda x: x[1], reverse=True):
                 print(f"    - {emotion}: {score:.1f}%")
@@ -87,6 +92,11 @@ def detect_faces_and_emotions(image_path, output_path):
             # Draw emotion label
             cv2.putText(image, label, (x + 5, y - 5),
                        font, font_scale, (0, 0, 0), thickness)
+            
+            # Draw age and gender below face
+            info_label = f"{gender}, {int(age)}y"
+            cv2.putText(image, info_label, (x, y + h + 20),
+                       font, 0.5, (0, 255, 0), 1)
         
         # Save result
         cv2.imwrite(str(output_path), image)
