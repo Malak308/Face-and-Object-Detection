@@ -1,214 +1,256 @@
-# Computer Vision Project - Object Detection & Face Emotion Recognition
+# Computer Vision Application - 5-in-1 System
 
-A comprehensive computer vision project featuring two powerful applications: **Object Detection with YOLOv8** and **Face Recognition with Emotion Detection**.
+A comprehensive computer vision application featuring 5 major CV topics for practical exam preparation.
 
-## Project Overview
+## 🎯 Features
 
-This project implements two fundamental computer vision tasks:
+### 1. Object Detection (YOLOv8)
+- Detects 80 different object classes from COCO dataset
+- Real-time detection with adjustable confidence threshold (0.15)
+- Visual bounding boxes with class names and confidence scores
+- Perfect for detecting everyday objects
 
-### 1. **Object Detection** 
-Identifies and locates multiple objects in images using YOLOv8, drawing bounding boxes with labels and confidence scores.
+### 2. Face & Emotion Detection (DeepFace)
+- Detects faces in images
+- Recognizes 7 emotions: happy, sad, angry, surprise, fear, disgust, neutral
+- **Webcam support** for real-time emotion detection
+- Shows confidence scores for each detected emotion
+- Optimized for speed with OpenCV backend
 
-### 2. **Face Recognition & Emotion Detection**
-Detects faces in images and analyzes emotions (happy, sad, angry, neutral, etc.) along with age and gender estimation.
+### 3. Image Classification (ResNet50)
+- Classifies images into 1000 ImageNet categories
+- Top-5 predictions with confidence scores
+- Visual confidence bars on output
+- Pre-trained ResNet50 model
 
-## Why Object Detection?
+### 4. Image Segmentation
+- Semantic segmentation to identify different regions
+- Color-based region detection
+- Side-by-side comparison with original
+- Counts and visualizes detected segments
 
-Object detection is a crucial computer vision application with real-world uses including:
-- Autonomous vehicles (detecting pedestrians, cars, traffic signs)
-- Security systems (monitoring and alerting)
-- Retail analytics (counting products, detecting inventory)
-- Medical imaging (identifying abnormalities)
+### 5. Traffic Sign Recognition
+- Detects and classifies traffic signs
+- Dual approach: YOLO + Color-Shape analysis
+- Identifies sign types: prohibitory, warning, mandatory, guide signs
+- Handles multiple signs in one image
 
-## Technical Approach
+## 📦 Installation
 
-### Model Choice: YOLOv8
-I chose **YOLOv8 (You Only Look Once)** because:
-- **Speed**: Single-pass detection makes it very fast
-- **Accuracy**: State-of-the-art performance on object detection benchmarks
-- **Ease of use**: Pre-trained on COCO dataset (80 object classes)
-- **Production-ready**: Widely used in real-world applications
-
-### How It Works
-
-1. **Image Loading**: Reads images using OpenCV
-2. **Preprocessing**: YOLOv8 automatically handles image preprocessing
-3. **Detection**: Model processes the image in a single forward pass
-4. **Post-processing**: 
-   - Non-maximum suppression removes duplicate detections
-   - Filters detections by confidence threshold (default: 50%)
-5. **Visualization**: Draws bounding boxes with labels and confidence scores
-6. **Output**: Saves annotated images showing all detected objects
-
-### What Can Be Detected?
-
-The model can detect 80 different object classes from the COCO dataset, including:
-- **People**: person
-- **Vehicles**: car, truck, bus, motorcycle, bicycle, airplane, boat, train
-- **Animals**: dog, cat, bird, horse, sheep, cow, elephant, bear, zebra, giraffe
-- **Common Objects**: bottle, cup, fork, knife, spoon, bowl, chair, couch, bed, table
-- **Electronics**: tv, laptop, mouse, remote, keyboard, cell phone
-- And many more...
-
-## Project Structure
-
-```
-Computer_Vision_proj/
-├── object_detection.py           # YOLOv8 object detection
-├── face_emotion_detection.py     # Face & emotion detection
-├── download_face_samples.py      # Download face image samples
-├── requirements.txt              # Python dependencies
-├── input_images/                 # Place test images here
-├── output_images/                # Detection results
-│   └── emotions/                 # Emotion detection results
-└── README.md                     # This file
+### 1. Clone the repository
+```bash
+git clone https://github.com/Malak308/Face-and-Object-Detection.git
+cd Computer_Vision_proj
 ```
 
-## Setup Instructions
+### 2. Create virtual environment (recommended)
+```bash
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+```
 
-### 1. Install Dependencies
-
+### 3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-**Note:** First run will download models (~600MB total):
-- YOLOv8 model: ~6MB
-- DeepFace models: ~600MB (emotion, age, gender, race)
+The YOLOv8 model (`yolov8n.pt`) will be downloaded automatically on first run.
 
-This installs:
-- `opencv-python`: Image processing
-- `ultralytics`: YOLOv8 implementation
-- `deepface`: Face recognition & emotion detection
-- `tensorflow`: Deep learning framework
-- `numpy`: Numerical operations
-- `pillow`: Image handling
+## 🚀 Usage
 
-### 2. Add Test Images
+### Main GUI Application (Recommended)
+Run the comprehensive GUI with all 5 features:
+```bash
+python gui_app.py
+```
 
-Place your test images in the `input_images/` folder. Supported formats:
-- JPG/JPEG
-- PNG
-- BMP
-- TIFF
-- WebP
+**GUI Features:**
+- Select from 5 detection modes via radio buttons
+- Upload images for analysis
+- Webcam button for emotion detection (appears in Face mode)
+- Side-by-side input/output comparison
+- Detailed detection results with statistics
+- Status log for tracking progress
 
-### 3. Run Object Detection
+### Standalone Scripts
 
+#### Object Detection
 ```bash
 python object_detection.py
 ```
+Place images in `input_images/objects/`, results in `output_images/objects/`
 
-The script will:
-- Load the YOLOv8 model (downloads automatically on first run)
-- Process all images in `input_images/`
-- Save results to `output_images/`
-- Print detection summary for each image
-
-### 4. Run Face & Emotion Detection
-
+#### Face & Emotion Detection
 ```bash
-# Download sample face images (optional)
-python download_face_samples.py
-
-# Run emotion detection
 python face_emotion_detection.py
 ```
+Place images in `input_images/faces/`, results in `output_images/emotions/`
 
-The script will:
-- Detect all faces in images
-- Analyze emotions for each face
-- Estimate age and gender
-- Save annotated results to `output_images/emotions/`
+#### Webcam Emotion Detection
+```bash
+python webcam_emotion_detection.py
+```
+**Controls:**
+- Press 'q' to quit
+- Press 's' to save current frame
+- Press 'p' to pause/resume
 
-## Example Outputs
+#### Image Classification
+```bash
+python image_classification.py
+```
+Place images in `input_images/classification/`, results in `output_images/classification/`
+
+#### Image Segmentation
+```bash
+python image_segmentation.py
+```
+Place images in `input_images/segmentation/`, results in `output_images/segmentation/`
+
+#### Traffic Sign Recognition
+```bash
+python traffic_sign_recognition.py
+```
+Place images in `input_images/traffic_signs/`, results in `output_images/traffic_signs/`
+
+## 📁 Project Structure
+
+```
+Computer_Vision_proj/
+├── gui_app.py                      # Main GUI (5 modes + webcam)
+├── object_detection.py             # Standalone object detection
+├── face_emotion_detection.py       # Standalone face/emotion detection
+├── webcam_emotion_detection.py     # Real-time webcam emotions
+├── image_classification.py         # Image classification (ResNet50)
+├── image_segmentation.py           # Image segmentation
+├── traffic_sign_recognition.py     # Traffic sign recognition
+├── requirements.txt                # Python dependencies
+├── yolov8n.pt                     # YOLOv8 model (auto-downloaded)
+├── README.md                       # This file
+├── PROJECT_SUMMARY.md              # Technical documentation
+├── input_images/
+│   ├── objects/                   # Object detection input
+│   ├── faces/                     # Face/emotion input
+│   ├── classification/            # Classification input
+│   ├── segmentation/              # Segmentation input
+│   └── traffic_signs/             # Traffic sign input
+└── output_images/
+    ├── objects/                   # Object detection results
+    ├── emotions/                  # Face/emotion results
+    ├── classification/            # Classification results
+    ├── segmentation/              # Segmentation results
+    └── traffic_signs/             # Traffic sign results
+```
+
+## 💻 Requirements
+
+- **Python**: 3.9+ (tested on 3.9.13)
+- **OpenCV**: 4.8.0+
+- **YOLOv8**: Ultralytics 8.0.0+
+- **DeepFace**: 0.0.79+
+- **TensorFlow**: 2.15.0+ (for classification)
+- **PyTorch**: 2.0.0+ (for YOLO)
+- **NumPy**: 1.24.0 - 1.26.x (not 2.x, incompatible with DeepFace)
+- **Pillow**: 10.0.0+
+
+All dependencies are in `requirements.txt`.
+
+## 🎨 GUI Overview
+
+### Dark Theme Interface
+- **Colors**: Dark background (#1a1a1a), cyan accent (#00d4ff), green success (#00ff88)
+- **Fonts**: Segoe UI for UI elements, Consolas for code/results
+- **Window Size**: 1500x900 optimized for display
+
+### Layout
+- **Left Panel** (380px): Mode selection, upload button, webcam button (emotion mode), status log
+- **Right Panel**: 
+  - Top: Input/output image comparison (500px height)
+  - Bottom: Detection details (expandable, 12pt Consolas font)
+
+### Detection Modes
+1. 🎯 Object Detection (80 classes)
+2. 😊 Face & Emotion Detection
+3. 🖼️ Image Classification (1000 classes)
+4. 🎨 Image Segmentation
+5. 🚦 Traffic Sign Recognition
+
+## 📊 Performance Tips
 
 ### Object Detection
+- Confidence threshold: 0.15 (adjustable)
+- Works best with everyday objects from COCO dataset
+- Clear lighting and multiple objects recommended
+
+### Face/Emotion Detection
+- Optimized for speed: emotion-only analysis
+- Use front-facing, well-lit faces
+- Webcam: analyzes every 10 frames for real-time performance
+- OpenCV backend for fast face detection
+
+### Image Classification
+- ResNet50 pre-trained on ImageNet
+- Top-5 predictions shown
+- Best with common objects/animals
+
+### Image Segmentation
+- Color-based region detection
+- Works best with distinct regions
+- Side-by-side comparison output
+
+### Traffic Sign Recognition
+- Dual approach: YOLO + color-shape analysis
+- Best with clear, unobstructed signs
+- Handles red, blue, yellow, green signs
+
+## 🎓 Educational Purpose
+
+This project covers all major Computer Vision topics for practical exams:
+
+1. ✅ **Object Detection** - YOLO-based multi-object detection
+2. ✅ **Face Recognition** - Face detection + emotion classification
+3. ✅ **Image Classification** - CNN-based category prediction
+4. ✅ **Image Segmentation** - Region-based segmentation
+5. ✅ **Specialized Detection** - Traffic sign recognition
+
+**Bonus Feature**: Real-time webcam emotion detection with live visualization!
+
+## 🐛 Troubleshooting
+
+### NumPy Version Error
+If you get NumPy compatibility errors with DeepFace:
+```bash
+pip uninstall numpy
+pip install "numpy>=1.24.0,<2.0.0"
 ```
-==================================================
-Image: street_scene.jpg
-==================================================
-Total objects detected: 5
 
-Detected objects:
-  - car: 95.23% confidence
-  - person: 89.45% confidence
-  - traffic light: 78.32% confidence
-  - bicycle: 82.11% confidence
-  - dog: 91.67% confidence
+### Webcam Not Working
+- Check camera permissions
+- Try different camera index: `start_webcam(camera_index=1)`
+- Ensure no other app is using the webcam
 
-Output saved to: output_images/detected_street_scene.jpg
-==================================================
-```
+### Model Download Issues
+- YOLOv8 downloads automatically (~6.2MB)
+- ResNet50 downloads from Keras (~98MB)
+- Check internet connection
 
-### Face & Emotion Detection
-```
-==================================================
-Processing: face_sample_1.jpg
-==================================================
-Found 1 face(s)
+### Slow Emotion Detection
+- Already optimized (emotion only, opencv backend)
+- First run initializes models (slower)
+- Subsequent runs are much faster
 
-Face 1:
-  Emotion: happy (100.0%)
-  Age: ~32 years
-  Gender: Woman (100.0%)
-  All emotions:
-    - happy: 100.0%
-    - neutral: 0.0%
-    - surprise: 0.0%
-    - sad: 0.0%
+## 📝 Credits
 
-Output saved to: output_images/emotions/emotion_face_sample_1.jpg
-==================================================
-```
+- **YOLOv8**: Ultralytics
+- **DeepFace**: serengil
+- **ResNet50**: Keras/TensorFlow
+- **COCO Dataset**: Common Objects in Context
 
-## Key Features
+## 📄 License
 
-- **Automatic Model Download**: YOLOv8 weights download on first run
-- **Batch Processing**: Processes all images in input folder
-- **Confidence Filtering**: Only shows detections above 50% confidence
-- **Visual Annotations**: Colored bounding boxes with labels
-- **Detailed Reports**: Prints what was detected in each image
+Educational project for Computer Vision practical exam preparation.
 
-## Customization Options
+## 🤝 Contributing
 
-You can modify the script to adjust:
-- **Confidence threshold**: Change `confidence_threshold` parameter (default: 0.5)
-- **Model size**: Switch between yolov8n (nano), yolov8s (small), yolov8m (medium), etc.
-- **Output format**: Modify visualization style in the code
-
-## Performance
-
-- **Model**: YOLOv8n (nano version)
-- **Speed**: ~20-30ms per image on CPU, ~5-10ms on GPU
-- **Accuracy**: High precision for common objects
-- **Size**: ~6MB model file
-
-## Learning Outcomes
-
-This project demonstrates:
-1. Using pre-trained deep learning models
-2. Image processing with OpenCV
-3. Real-world computer vision pipeline (load → process → visualize → save)
-4. Working with modern object detection architectures
-5. Practical implementation of YOLO algorithm
-
-## Next Steps / Improvements
-
-Potential enhancements:
-- Add video processing capability
-- Implement custom object training
-- Add object tracking across frames
-- Create a web interface
-- Optimize for edge devices (Raspberry Pi, Jetson Nano)
-
-## References
-
-- [YOLOv8 Documentation](https://docs.ultralytics.com/)
-- [COCO Dataset](https://cocodataset.org/)
-- [OpenCV Documentation](https://docs.opencv.org/)
-
----
-
-**Project Created**: December 2025  
-**Purpose**: Computer Vision Practical Exam
+This is a student project. Feel free to fork and customize for your own learning!

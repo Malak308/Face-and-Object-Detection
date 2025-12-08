@@ -1,11 +1,10 @@
 """
-Computer Vision GUI Application
-Supports Object Detection and Face/Emotion Detection
-Upload images and get results with detailed analysis
+Computer Vision Application - Modern GUI with CustomTkinter
+Supports 5 CV modes: Object Detection, Emotion Recognition, Classification, Segmentation, Traffic Signs
 """
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk, ImageOps
 import cv2
 from ultralytics import YOLO
@@ -13,289 +12,580 @@ from deepface import DeepFace
 from pathlib import Path
 import threading
 import os
+from datetime import datetime
+import queue
+
+# Import CV modules from Detection Modes folder
+import sys
+sys.path.append(str(Path(__file__).parent / "Detection Modes"))
+from image_classification import ImageClassifier
+from image_segmentation import ImageSegmenter
+from traffic_sign_recognition import TrafficSignRecognizer
+from webcam_emotion_detection import WebcamEmotionDetector
+
 
 class ComputerVisionGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Computer Vision Application")
+    """
+    Modern GUI for Computer Vision using CustomTkinter
+    """
+    
+    def __init__(self):
+        # Set appearance mode and color theme
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+        
+        # Create main window
+        self.root = ctk.CTk()
+        self.root.title("🔍 Computer Vision Detection System v2.0")
         self.root.geometry("1500x900")
-        self.root.configure(bg="#1a1a1a")
         
-        # Configure style
-        self.setup_styles()
+        # Set minimum window size
+        self.root.minsize(1400, 850)
         
-        # Create output directories
-        self.setup_directories()
+        # Custom colors matching the network tool
+        self.colors = {
+            'primary': '#1e40af',      # Deep blue
+            'secondary': '#3b82f6',    # Bright blue
+            'success': '#10b981',      # Green
+            'danger': '#ef4444',       # Red
+            'warning': '#f59e0b',      # Orange
+            'info': '#06b6d4',         # Cyan
+            'dark': '#1f2937',         # Dark gray
+            'darker': '#111827',       # Darker gray
+            'light': '#f3f4f6',        # Light gray
+            'accent': '#8b5cf6'        # Purple
+        }
         
-        # Load models (will be done on first use)
+        # Initialize models
         self.yolo_model = None
+        self.classifier = None
+        self.segmenter = None
+        self.traffic_recognizer = None
+        self.webcam_detector = None
+        
+        # State variables
         self.current_image_path = None
         self.current_output_path = None
+        self.stop_flag = False
+        self.processing_thread = None
+        self.output_queue = queue.Queue()
         
-        # Setup GUI
-        self.setup_gui()
+        # Webcam variables
+        self.webcam_active = False
+        self.webcam_cap = None
+        self.webcam_thread = None
         
-    def setup_styles(self):
-        """Setup color scheme and fonts"""
-        self.colors = {
-            'bg_dark': '#1a1a1a',
-            'bg_medium': '#2d2d2d',
-            'bg_light': '#3d3d3d',
-            'accent': '#00d4ff',
-            'success': '#00ff88',
-            'text': '#ffffff',
-            'text_dim': '#b0b0b0'
-        }
+        # Setup directories
+        self.setup_directories()
         
-        self.fonts = {
-            'title': ('Segoe UI', 28, 'bold'),
-            'heading': ('Segoe UI', 14, 'bold'),
-            'button': ('Segoe UI', 12, 'bold'),
-            'text': ('Segoe UI', 11),
-            'small': ('Segoe UI', 10),
-            'mono': ('Consolas', 10)
-        }
-    
+        # Build GUI
+        self.build_gui()
+        
+        # Check initial mode to show/hide webcam button
+        self.on_mode_change()
+        
+        # Start output processor
+        self.process_output()
+        
     def setup_directories(self):
         """Create necessary directories"""
         base_dir = Path(__file__).parent
         
-        # Separate folders for different detection types
-        self.object_detection_input = base_dir / "input_images" / "objects"
-        self.face_detection_input = base_dir / "input_images" / "faces"
-        self.object_detection_output = base_dir / "output_images" / "objects"
-        self.face_detection_output = base_dir / "output_images" / "emotions"
+        # Input folders
+        self.object_input = base_dir / "input_images" / "objects"
+        self.face_input = base_dir / "input_images" / "faces"
+        self.classification_input = base_dir / "input_images" / "classification"
+        self.segmentation_input = base_dir / "input_images" / "segmentation"
+        self.traffic_input = base_dir / "input_images" / "traffic_signs"
         
-        for directory in [self.object_detection_input, self.face_detection_input,
-                         self.object_detection_output, self.face_detection_output]:
+        # Output folders
+        self.object_output = base_dir / "output_images" / "objects"
+        self.face_output = base_dir / "output_images" / "emotions"
+        self.classification_output = base_dir / "output_images" / "classification"
+        self.segmentation_output = base_dir / "output_images" / "segmentation"
+        self.traffic_output = base_dir / "output_images" / "traffic_signs"
+        
+        all_dirs = [
+            self.object_input, self.face_input, self.classification_input, 
+            self.segmentation_input, self.traffic_input,
+            self.object_output, self.face_output, self.classification_output,
+            self.segmentation_output, self.traffic_output
+        ]
+        
+        for directory in all_dirs:
             directory.mkdir(parents=True, exist_ok=True)
     
-    def setup_gui(self):
-        """Setup the GUI layout"""
+    def build_gui(self):
+        """Build the complete GUI layout"""
+        # Configure grid
+        self.root.grid_columnconfigure(1, weight=1)
+        self.root.grid_rowconfigure(0, weight=1)
         
-        # Title
-        title_frame = tk.Frame(self.root, bg=self.colors['bg_medium'], height=100)
-        title_frame.pack(fill=tk.X, padx=15, pady=15)
-        title_frame.pack_propagate(False)
+        # Left sidebar
+        self.create_sidebar()
         
-        title_label = tk.Label(
-            title_frame,
-            text="🔍 Computer Vision Detection System",
-            font=self.fonts['title'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['accent']
+        # Main content area
+        self.create_main_content()
+    
+    def create_sidebar(self):
+        """Create left sidebar with controls"""
+        # Sidebar container
+        sidebar_container = ctk.CTkFrame(self.root, width=380, corner_radius=0, fg_color=self.colors['darker'])
+        sidebar_container.grid(row=0, column=0, sticky="nsew")
+        sidebar_container.grid_rowconfigure(0, weight=1)
+        sidebar_container.grid_columnconfigure(0, weight=1)
+        
+        # Scrollable sidebar
+        sidebar = ctk.CTkScrollableFrame(
+            sidebar_container,
+            width=360,
+            corner_radius=0,
+            fg_color=self.colors['darker'],
+            scrollbar_button_color=self.colors['primary'],
+            scrollbar_button_hover_color=self.colors['secondary']
         )
-        title_label.pack(expand=True)
+        sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        sidebar.grid_columnconfigure(0, weight=1)
         
-        subtitle_label = tk.Label(
+        # Logo/Title
+        title_frame = ctk.CTkFrame(sidebar, fg_color=self.colors['primary'], corner_radius=10)
+        title_frame.grid(row=0, column=0, padx=15, pady=(15, 20), sticky="ew")
+        
+        title_label = ctk.CTkLabel(
             title_frame,
-            text="Object Detection & Emotion Recognition",
-            font=self.fonts['small'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text_dim']
+            text="🔍 Computer Vision\nDetection System",
+            font=ctk.CTkFont(size=22, weight="bold"),
+            text_color="white"
         )
-        subtitle_label.pack()
+        title_label.pack(pady=15)
         
-        # Main content frame
-        content_frame = tk.Frame(self.root, bg=self.colors['bg_dark'])
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+        version_label = ctk.CTkLabel(
+            sidebar,
+            text="Version 2.0 | Educational Purpose",
+            font=ctk.CTkFont(size=10),
+            text_color="gray60"
+        )
+        version_label.grid(row=1, column=0, padx=20, pady=(0, 10))
         
-        # Left panel - Controls
-        left_panel = tk.Frame(content_frame, bg=self.colors['bg_medium'], width=380)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 15))
-        left_panel.pack_propagate(False)
-        
-        # Upload section
-        upload_frame = tk.LabelFrame(
-            left_panel,
+        # Upload Section
+        upload_label = ctk.CTkLabel(
+            sidebar,
             text="📁 Upload Image",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text'],
-            padx=15,
-            pady=15
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.colors['info']
         )
-        upload_frame.pack(fill=tk.X, padx=15, pady=15)
+        upload_label.grid(row=2, column=0, padx=20, pady=(10, 5), sticky="w")
         
-        self.upload_btn = tk.Button(
-            upload_frame,
+        self.upload_btn = ctk.CTkButton(
+            sidebar,
             text="📤 Choose Image",
             command=self.upload_image,
-            font=self.fonts['button'],
-            bg=self.colors['success'],
-            fg="#000000",
-            cursor="hand2",
-            height=2,
-            relief=tk.FLAT,
-            activebackground="#00cc70"
+            width=340,
+            height=40,
+            corner_radius=8,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=self.colors['success'],
+            hover_color="#059669"
         )
-        self.upload_btn.pack(fill=tk.X, pady=8)
+        self.upload_btn.grid(row=3, column=0, padx=20, pady=5)
         
-        self.file_label = tk.Label(
-            upload_frame,
+        self.file_label = ctk.CTkLabel(
+            sidebar,
             text="No file selected",
-            font=self.fonts['small'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text_dim'],
+            font=ctk.CTkFont(size=11),
+            text_color="gray60",
             wraplength=320
         )
-        self.file_label.pack(pady=8)
+        self.file_label.grid(row=4, column=0, padx=20, pady=5)
         
-        # Detection mode selection
-        mode_frame = tk.LabelFrame(
-            left_panel,
+        # Detection Mode Section
+        mode_label = ctk.CTkLabel(
+            sidebar,
             text="🎯 Detection Mode",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text'],
-            padx=15,
-            pady=15
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.colors['warning']
         )
-        mode_frame.pack(fill=tk.X, padx=15, pady=15)
+        mode_label.grid(row=5, column=0, padx=20, pady=(20, 5), sticky="w")
         
-        self.mode_var = tk.StringVar(value="object")
+        # Mode selection frame
+        mode_frame = ctk.CTkFrame(sidebar, fg_color=self.colors['dark'], corner_radius=10, border_width=2, border_color=self.colors['secondary'])
+        mode_frame.grid(row=6, column=0, padx=20, pady=5, sticky="ew")
         
-        object_radio = tk.Radiobutton(
-            mode_frame,
-            text="🎯 Object Detection (80 classes)",
-            variable=self.mode_var,
-            value="object",
-            font=self.fonts['text'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text'],
-            selectcolor=self.colors['bg_light'],
-            activebackground=self.colors['bg_medium'],
-            activeforeground=self.colors['accent']
+        self.mode_var = ctk.StringVar(value="object")
+        
+        modes = [
+            ("Object Detection", "object"),
+            ("Face & Emotion", "face"),
+            ("Image Classification", "classification"),
+            ("Image Segmentation", "segmentation"),
+            ("Traffic Sign Recognition", "traffic")
+        ]
+        
+        for idx, (text, value) in enumerate(modes):
+            radio = ctk.CTkRadioButton(
+                mode_frame,
+                text=text,
+                variable=self.mode_var,
+                value=value,
+                font=ctk.CTkFont(size=12),
+                command=self.on_mode_change,
+                fg_color=self.colors['primary'],
+                hover_color=self.colors['secondary']
+            )
+            radio.grid(row=idx, column=0, padx=15, pady=5, sticky="w")
+        
+        # Store sidebar reference for webcam button
+        self.sidebar = sidebar
+        
+        # Webcam button (initially not displayed)
+        self.webcam_btn = ctk.CTkButton(
+            sidebar,
+            text="📹 Use Webcam",
+            command=self.start_webcam,
+            width=340,
+            height=36,
+            corner_radius=8,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=self.colors['accent'],
+            hover_color="#7c3aed"
         )
-        object_radio.pack(anchor=tk.W, pady=8)
+        # Don't grid it yet - will appear when face mode is selected
         
-        face_radio = tk.Radiobutton(
-            mode_frame,
-            text="😊 Face & Emotion Detection",
-            variable=self.mode_var,
-            value="face",
-            font=self.fonts['text'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text'],
-            selectcolor=self.colors['bg_light'],
-            activebackground=self.colors['bg_medium'],
-            activeforeground=self.colors['accent']
+        # Action Buttons
+        action_label = ctk.CTkLabel(
+            sidebar,
+            text="⚡ Actions",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.colors['accent']
         )
-        face_radio.pack(anchor=tk.W, pady=8)
+        action_label.grid(row=8, column=0, padx=20, pady=(20, 5), sticky="w")
         
-        # Detect button
-        self.detect_btn = tk.Button(
-            left_panel,
+        self.detect_btn = ctk.CTkButton(
+            sidebar,
             text="🚀 RUN DETECTION",
             command=self.run_detection,
-            font=self.fonts['button'],
-            bg=self.colors['accent'],
-            fg="#000000",
-            cursor="hand2",
-            height=3,
-            relief=tk.FLAT,
-            state=tk.DISABLED,
-            activebackground="#00b8e6"
+            width=340,
+            height=50,
+            corner_radius=10,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color=self.colors['primary'],
+            hover_color=self.colors['secondary'],
+            state="disabled"
         )
-        self.detect_btn.pack(fill=tk.X, padx=15, pady=20)
+        self.detect_btn.grid(row=9, column=0, padx=20, pady=8)
         
-        # Status section
-        status_frame = tk.LabelFrame(
-            left_panel,
+        self.stop_btn = ctk.CTkButton(
+            sidebar,
+            text="⛔ STOP",
+            command=self.stop_detection,
+            width=340,
+            height=40,
+            corner_radius=8,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=self.colors['danger'],
+            hover_color="#dc2626",
+            state="disabled"
+        )
+        self.stop_btn.grid(row=10, column=0, padx=20, pady=5)
+        
+        clear_btn = ctk.CTkButton(
+            sidebar,
+            text="🗑️ Clear All",
+            command=self.clear_all,
+            width=340,
+            height=36,
+            corner_radius=8,
+            font=ctk.CTkFont(size=12),
+            fg_color=self.colors['dark'],
+            hover_color="#374151",
+            border_width=1,
+            border_color="gray50"
+        )
+        clear_btn.grid(row=11, column=0, padx=20, pady=5)
+        
+        # Status Log Section
+        log_label = ctk.CTkLabel(
+            sidebar,
             text="📊 Status Log",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text'],
-            padx=15,
-            pady=15
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.colors['info']
         )
-        status_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        log_label.grid(row=12, column=0, padx=20, pady=(20, 5), sticky="w")
         
-        self.status_text = scrolledtext.ScrolledText(
+        self.status_text = ctk.CTkTextbox(
+            sidebar,
+            width=340,
+            height=200,
+            corner_radius=10,
+            border_width=2,
+            border_color=self.colors['secondary'],
+            fg_color="#0f172a",
+            font=ctk.CTkFont(family="Consolas", size=10),
+            text_color="#a5f3fc"
+        )
+        self.status_text.grid(row=13, column=0, padx=20, pady=(5, 20))
+        self.log_status("✅ System Ready")
+        self.log_status("Upload an image to start detection")
+    
+    def create_main_content(self):
+        """Create main content area"""
+        # Main frame
+        main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        main_frame.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
+        main_frame.grid_rowconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
+        
+        # Status bar at top
+        status_frame = ctk.CTkFrame(main_frame, fg_color=self.colors['dark'], corner_radius=10, height=60)
+        status_frame.grid(row=0, column=0, padx=10, pady=(10, 15), sticky="ew")
+        status_frame.grid_columnconfigure(0, weight=1)
+        
+        self.status_label = ctk.CTkLabel(
             status_frame,
-            font=self.fonts['mono'],
-            bg=self.colors['bg_light'],
-            fg=self.colors['success'],
-            height=15,
-            wrap=tk.WORD,
-            relief=tk.FLAT
+            text="✅ Ready to detect",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            anchor="w",
+            text_color=self.colors['success']
         )
-        self.status_text.pack(fill=tk.BOTH, expand=True)
-        self.log_status("✓ System Ready. Please upload an image.")
+        self.status_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
         
-        # Right panel - Images and Results
-        right_panel = tk.Frame(content_frame, bg=self.colors['bg_dark'])
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        self.status_icon = ctk.CTkLabel(
+            status_frame,
+            text="●",
+            font=ctk.CTkFont(size=24),
+            text_color=self.colors['success']
+        )
+        self.status_icon.grid(row=0, column=1, padx=20, pady=15, sticky="e")
         
-        # Top: Images (larger to fill frame)
-        images_frame = tk.Frame(right_panel, bg=self.colors['bg_dark'], height=500)
-        images_frame.pack(fill=tk.X, pady=(0, 10))
-        images_frame.pack_propagate(False)
+        # Tabview for results
+        self.tabview = ctk.CTkTabview(
+            main_frame,
+            corner_radius=15,
+            border_width=2,
+            border_color=self.colors['primary'],
+            fg_color=self.colors['dark'],
+            segmented_button_fg_color=self.colors['darker'],
+            segmented_button_selected_color=self.colors['primary'],
+            segmented_button_selected_hover_color=self.colors['secondary']
+        )
+        self.tabview.grid(row=1, column=0, padx=10, pady=5, sticky="nsew")
         
-        # Input image
-        input_frame = tk.LabelFrame(
-            images_frame,
+        # Create tabs
+        self.tabview.add("📷 Images")
+        self.tabview.add("📋 Details")
+        
+        # Setup tabs
+        self.setup_images_tab()
+        self.setup_details_tab()
+    
+    def setup_images_tab(self):
+        """Setup images display tab"""
+        tab = self.tabview.tab("📷 Images")
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_columnconfigure(1, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+        
+        # Input image frame
+        input_frame = ctk.CTkFrame(tab, fg_color=self.colors['darker'], corner_radius=10, border_width=2, border_color=self.colors['info'])
+        input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        input_label = ctk.CTkLabel(
+            input_frame,
             text="📷 Input Image",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text']
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.colors['info']
         )
-        input_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+        input_label.pack(pady=10)
         
-        self.input_image_label = tk.Label(
+        self.input_image_label = ctk.CTkLabel(
             input_frame,
             text="No image loaded\n\n📁 Click 'Choose Image' to start",
-            bg=self.colors['bg_light'],
-            fg=self.colors['text_dim'],
-            font=self.fonts['text']
+            font=ctk.CTkFont(size=12),
+            text_color="gray60"
         )
-        self.input_image_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.input_image_label.pack(fill="both", expand=True, padx=15, pady=15)
         
-        # Output image
-        output_frame = tk.LabelFrame(
-            images_frame,
+        # Output image frame
+        output_frame = ctk.CTkFrame(tab, fg_color=self.colors['darker'], corner_radius=10, border_width=2, border_color=self.colors['success'])
+        output_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        
+        output_label = ctk.CTkLabel(
+            output_frame,
             text="✅ Output Image",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text']
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.colors['success']
         )
-        output_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 0))
+        output_label.pack(pady=10)
         
-        self.output_image_label = tk.Label(
+        self.output_image_label = ctk.CTkLabel(
             output_frame,
             text="Detection results will appear here\n\n🚀 Run detection to see results",
-            bg=self.colors['bg_light'],
-            fg=self.colors['text_dim'],
-            font=self.fonts['text']
+            font=ctk.CTkFont(size=12),
+            text_color="gray60"
         )
-        self.output_image_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.output_image_label.pack(fill="both", expand=True, padx=15, pady=15)
+    
+    def setup_details_tab(self):
+        """Setup detection details tab"""
+        tab = self.tabview.tab("📋 Details")
         
-        # Bottom: Details (much larger)
-        details_frame = tk.LabelFrame(
-            right_panel,
-            text="📋 Detection Details",
-            font=self.fonts['heading'],
-            bg=self.colors['bg_medium'],
-            fg=self.colors['text']
+        details_header = ctk.CTkLabel(
+            tab,
+            text="📊 Detection Results & Analysis",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=self.colors['warning']
         )
-        details_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        details_header.pack(pady=15)
         
-        self.details_text = scrolledtext.ScrolledText(
-            details_frame,
-            font=('Consolas', 12),
-            bg=self.colors['bg_light'],
-            fg=self.colors['text'],
-            wrap=tk.WORD,
-            relief=tk.FLAT
+        self.details_text = ctk.CTkTextbox(
+            tab,
+            wrap="word",
+            font=ctk.CTkFont(family="Consolas", size=11),
+            corner_radius=10,
+            border_width=2,
+            border_color=self.colors['accent'],
+            fg_color=self.colors['darker']
         )
-        self.details_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.details_text.pack(fill="both", expand=True, padx=15, pady=10)
+    
+    def on_mode_change(self):
+        """Handle mode change - show/hide webcam button and stop webcam if active"""
+        if self.mode_var.get() == "face":
+            # Show webcam button below mode selection (row 7, between mode frame and actions)
+            self.webcam_btn.grid(row=7, column=0, padx=20, pady=(10, 5), sticky="ew")
+        else:
+            # Hide webcam button for other modes
+            self.webcam_btn.grid_forget()
+            # Stop webcam if it's currently active
+            if self.webcam_active:
+                self.stop_webcam()
+    
+    def start_webcam(self):
+        """Start webcam emotion detection in GUI"""
+        if self.webcam_active:
+            self.stop_webcam()
+            return
         
+        self.log_status("📹 Starting webcam emotion detection...")
+        self.webcam_active = True
+        self.webcam_btn.configure(text="⏹ Stop Webcam", fg_color=self.colors['danger'])
+        
+        # Switch to Images tab to show webcam feed
+        self.tabview.set("📷 Images")
+        
+        # Initialize webcam
+        self.webcam_cap = cv2.VideoCapture(0)
+        if not self.webcam_cap.isOpened():
+            self.log_status("❌ Error: Could not open webcam")
+            self.webcam_active = False
+            self.webcam_btn.configure(text="📹 Use Webcam", fg_color=self.colors['accent'])
+            return
+        
+        # Set resolution
+        self.webcam_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.webcam_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        
+        self.log_status("✅ Webcam started successfully!")
+        
+        # Initialize frame counters
+        self.frame_count = 0
+        self.analyze_interval = 10
+        self.last_analysis = None
+        
+        # Start webcam loop
+        self.webcam_loop()
+    
+    def stop_webcam(self):
+        """Stop webcam detection"""
+        self.log_status("⏹ Stopping webcam...")
+        self.webcam_active = False
+        
+        if self.webcam_cap:
+            self.webcam_cap.release()
+            self.webcam_cap = None
+        
+        self.webcam_btn.configure(text="📹 Use Webcam", fg_color=self.colors['accent'])
+        self.log_status("✅ Webcam stopped")
+    
+    def webcam_loop(self):
+        """Main webcam processing loop - runs in background thread"""
+        if self.webcam_detector is None:
+            self.webcam_detector = WebcamEmotionDetector()
+        
+        self.frame_count = 0
+        self.analyze_interval = 10
+        self.last_analysis = None
+        
+        # Start the update cycle in main thread
+        self.root.after(10, self.update_webcam_frame)
+    
+    def update_webcam_frame(self):
+        """Update webcam frame - runs in main thread"""
+        if not self.webcam_active or not self.webcam_cap:
+            return
+        
+        ret, frame = self.webcam_cap.read()
+        
+        if not ret:
+            self.log_status("❌ Failed to capture frame")
+            self.stop_webcam()
+            return
+        
+        # Analyze periodically
+        if self.frame_count % self.analyze_interval == 0:
+            try:
+                self.last_analysis = self.webcam_detector.analyze_frame(frame)
+            except Exception as e:
+                self.log_status(f"⚠ Analysis error: {str(e)}")
+                self.last_analysis = None
+        
+        # Draw emotion info
+        if self.last_analysis:
+            frame = self.webcam_detector.draw_emotion_info(frame, self.last_analysis)
+        
+        # Add overlay
+        info_text = "LIVE EMOTION DETECTION"
+        cv2.rectangle(frame, (0, 0), (frame.shape[1], 40), (0, 0, 0), -1)
+        cv2.putText(frame, info_text, (10, 25),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        
+        # Convert to PIL Image for display
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(frame_rgb)
+        
+        # Resize to fit display
+        display_size = (640, 480)
+        pil_image.thumbnail(display_size, Image.Resampling.LANCZOS)
+        
+        # Update GUI
+        photo = ImageTk.PhotoImage(image=pil_image)
+        self.output_image_label.configure(image=photo, text="")
+        self.output_image_label.image = photo
+        
+        self.frame_count += 1
+        
+        # Schedule next frame update (30 FPS = ~33ms)
+        if self.webcam_active:
+            self.root.after(33, self.update_webcam_frame)
+    
     def log_status(self, message):
         """Add message to status log"""
-        self.status_text.insert(tk.END, f"► {message}\n")
-        self.status_text.see(tk.END)
-        self.root.update()
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.output_queue.put(f"[{timestamp}] {message}")
+    
+    def process_output(self):
+        """Process output queue and update console"""
+        try:
+            while True:
+                message = self.output_queue.get_nowait()
+                self.status_text.insert("end", message + "\n")
+                self.status_text.see("end")
+        except queue.Empty:
+            pass
         
+        # Schedule next check
+        self.root.after(100, self.process_output)
+    
     def upload_image(self):
         """Handle image upload"""
         file_path = filedialog.askopenfilename(
@@ -308,40 +598,38 @@ class ComputerVisionGUI:
         
         if file_path:
             self.current_image_path = file_path
-            self.file_label.config(text=os.path.basename(file_path))
-            self.detect_btn.config(state=tk.NORMAL)
-            self.log_status(f"Loaded: {os.path.basename(file_path)}")
+            self.file_label.configure(text=os.path.basename(file_path))
+            self.detect_btn.configure(state="normal")
+            self.log_status(f"✓ Loaded: {os.path.basename(file_path)}")
             
             # Display input image
             self.display_image(file_path, self.input_image_label)
             
             # Clear previous results
-            self.output_image_label.config(image='', text="Detection results will appear here\n\n🚀 Run detection to see results", bg=self.colors['bg_light'])
-            self.details_text.delete(1.0, tk.END)
+            self.output_image_label.configure(image='', text="Detection results will appear here\n\n🚀 Run detection to see results")
+            self.details_text.delete("1.0", "end")
     
     def display_image(self, image_path, label, is_output=False):
         """Display image in label"""
         try:
             # Load image
             image = Image.open(image_path)
-
-            # Different sizes for input (smaller) vs output (larger)
+            
+            # Larger sizes for better visibility
             if is_output:
-                # Output image - larger to show detection results clearly
-                max_w, max_h = 600, 500
+                max_w, max_h = 650, 550
             else:
-                # Input image - smaller
-                max_w, max_h = 400, 450
-
-            # Resize to fit while preserving aspect ratio (no cropping)
+                max_w, max_h = 650, 550
+            
+            # Resize while preserving aspect ratio
             image = ImageOps.contain(image, (max_w, max_h), Image.Resampling.LANCZOS)
-
+            
             photo = ImageTk.PhotoImage(image)
-            label.config(image=photo, text="", bg=self.colors['bg_dark'], anchor='center')
+            label.configure(image=photo, text="")
             label.image = photo  # Keep reference
             
         except Exception as e:
-            self.log_status(f"Error displaying image: {e}")
+            self.log_status(f"✗ Error displaying image: {e}")
     
     def run_detection(self):
         """Run detection in separate thread"""
@@ -349,32 +637,75 @@ class ComputerVisionGUI:
             messagebox.showwarning("No Image", "Please upload an image first!")
             return
         
-        # Disable button during processing
-        self.detect_btn.config(state=tk.DISABLED, text="⏳ PROCESSING...", bg=self.colors['text_dim'])
-        self.details_text.delete(1.0, tk.END)
+        # Reset stop flag
+        self.stop_flag = False
+        
+        # Update UI
+        self.detect_btn.configure(state="disabled", text="⏳ PROCESSING...")
+        self.stop_btn.configure(state="normal")
+        self.status_label.configure(text="🔍 Detection in progress...", text_color=self.colors['warning'])
+        self.status_icon.configure(text_color=self.colors['warning'])
+        self.details_text.delete("1.0", "end")
         
         mode = self.mode_var.get()
         
-        # Run in thread to avoid freezing GUI
-        thread = threading.Thread(target=self.process_detection, args=(mode,))
-        thread.daemon = True
-        thread.start()
+        # Run in thread
+        self.processing_thread = threading.Thread(target=self.process_detection, args=(mode,))
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+    
+    def stop_detection(self):
+        """Stop the current detection process"""
+        # Stop webcam if active
+        if self.webcam_active:
+            self.stop_webcam()
+        
+        self.stop_flag = True
+        self.log_status("⛔ Stopping detection...")
+        self.stop_btn.configure(state="disabled")
+        self.detect_btn.configure(state="normal", text="🚀 RUN DETECTION")
     
     def process_detection(self, mode):
         """Process the detection based on selected mode"""
         try:
+            if self.stop_flag:
+                self.log_status("✗ Detection stopped by user")
+                return
+            
             if mode == "object":
                 self.log_status("Running Object Detection...")
-                self.detect_objects()
-            else:
+                if not self.stop_flag:
+                    self.detect_objects()
+            elif mode == "face":
                 self.log_status("Running Face & Emotion Detection...")
-                self.detect_faces_emotions()
-                
+                if not self.stop_flag:
+                    self.detect_faces_emotions()
+            elif mode == "classification":
+                self.log_status("Running Image Classification...")
+                if not self.stop_flag:
+                    self.classify_image()
+            elif mode == "segmentation":
+                self.log_status("Running Image Segmentation...")
+                if not self.stop_flag:
+                    self.segment_image()
+            elif mode == "traffic":
+                self.log_status("Running Traffic Sign Recognition...")
+                if not self.stop_flag:
+                    self.recognize_traffic_signs()
+                    
         except Exception as e:
-            self.log_status(f"✗ Error: {str(e)}")
-            messagebox.showerror("Error", f"Detection failed: {str(e)}")
+            if not self.stop_flag:
+                self.log_status(f"✗ Error: {str(e)}")
+                messagebox.showerror("Error", f"Detection failed: {str(e)}")
         finally:
-            self.detect_btn.config(state=tk.NORMAL, text="🚀 RUN DETECTION", bg=self.colors['accent'])
+            self.root.after(0, self.finish_detection)
+    
+    def finish_detection(self):
+        """Cleanup after detection finishes"""
+        self.detect_btn.configure(state="normal", text="🚀 RUN DETECTION")
+        self.stop_btn.configure(state="disabled")
+        self.status_label.configure(text="✅ Detection complete - Ready for next scan", text_color=self.colors['success'])
+        self.status_icon.configure(text_color=self.colors['success'])
     
     def detect_objects(self):
         """Perform object detection"""
@@ -388,21 +719,21 @@ class ComputerVisionGUI:
             # Read image
             image = cv2.imread(self.current_image_path)
             
-            # Run detection with lower confidence threshold for more detections
+            # Run detection
             self.log_status("Analyzing image...")
             results = self.yolo_model(image, conf=0.15, verbose=False)
             
             # Get annotated image
             annotated_image = results[0].plot()
             
-            # Save to objects folder
+            # Save
             filename = os.path.basename(self.current_image_path)
-            output_path = self.object_detection_output / f"detected_{filename}"
+            output_path = self.object_output / f"detected_{filename}"
             cv2.imwrite(str(output_path), annotated_image)
             self.current_output_path = str(output_path)
             
             # Display output
-            self.display_image(str(output_path), self.output_image_label, is_output=True)
+            self.root.after(0, lambda: self.display_image(str(output_path), self.output_image_label, is_output=True))
             
             # Get detections
             detections = results[0].boxes
@@ -424,9 +755,7 @@ class ComputerVisionGUI:
                     confidence = float(box.conf[0])
                     class_name = self.yolo_model.names[class_id]
                     
-                    # Count objects
                     object_counts[class_name] = object_counts.get(class_name, 0) + 1
-                    
                     details += f"  🎯 {class_name.upper():15s} {confidence:6.1%} confidence\n"
                 
                 details += "\n" + "─" * 60 + "\n"
@@ -434,16 +763,12 @@ class ComputerVisionGUI:
                 for obj, count in sorted(object_counts.items()):
                     details += f"  • {obj.capitalize():15s} Count: {count}\n"
             else:
-                details += "\n⚠ No objects detected.\n\n"
-                details += "Tips:\n"
-                details += "  • Use an image with common objects\n"
-                details += "  • Ensure better lighting/clarity\n"
-                details += "  • Objects must be in the 80 COCO classes\n"
+                details += "\n⚠ No objects detected.\n"
             
             details += f"\n{'='*60}\n"
             details += f"✓ Output saved: {output_path.name}\n"
             
-            self.details_text.insert(1.0, details)
+            self.root.after(0, lambda: self.details_text.insert("1.0", details))
             self.log_status("✓ Detection complete!")
             
         except Exception as e:
@@ -453,21 +778,19 @@ class ComputerVisionGUI:
         """Perform face and emotion detection"""
         try:
             self.log_status("Analyzing faces and emotions...")
-            self.log_status("(This may take a moment...)")
             
             # Read image
             image = cv2.imread(self.current_image_path)
             
-            # Analyze with DeepFace (only emotion for speed)
+            # Analyze with DeepFace
             results = DeepFace.analyze(
                 img_path=self.current_image_path,
-                actions=['emotion'],  # Only emotion - much faster
+                actions=['emotion'],
                 enforce_detection=False,
                 silent=True,
-                detector_backend='opencv'  # Faster detector
+                detector_backend='opencv'
             )
             
-            # Handle single or multiple faces
             if not isinstance(results, list):
                 results = [results]
             
@@ -476,38 +799,31 @@ class ComputerVisionGUI:
                 region = result['region']
                 x, y, w, h = region['x'], region['y'], region['w'], region['h']
                 
-                # Draw rectangle (thicker for better visibility)
                 cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 3)
                 
-                # Get dominant emotion
                 dominant_emotion = result['dominant_emotion']
                 emotion_score = result['emotion'][dominant_emotion]
                 
-                # Draw label with larger font
                 label = f"{dominant_emotion.upper()} {emotion_score:.0f}%"
                 
-                # Calculate label size for better background
                 font_scale = 1.0
                 thickness = 3
                 (text_width, text_height), baseline = cv2.getTextSize(
                     label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
                 )
                 
-                # Draw background rectangle
                 cv2.rectangle(image, (x, y-text_height-20), (x+text_width+10, y), (0, 255, 0), -1)
-                
-                # Draw text
                 cv2.putText(image, label, (x+5, y-10),
                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
             
-            # Save to emotions folder
+            # Save
             filename = os.path.basename(self.current_image_path)
-            output_path = self.face_detection_output / f"emotion_{filename}"
+            output_path = self.face_output / f"emotion_{filename}"
             cv2.imwrite(str(output_path), image)
             self.current_output_path = str(output_path)
             
             # Display output
-            self.display_image(str(output_path), self.output_image_label, is_output=True)
+            self.root.after(0, lambda: self.display_image(str(output_path), self.output_image_label, is_output=True))
             
             self.log_status(f"✓ Found {len(results)} face(s)")
             
@@ -522,13 +838,11 @@ class ComputerVisionGUI:
                     details += f"\n▼ Face {idx}:\n"
                     details += "─" * 60 + "\n"
                     
-                    # Emotion
                     emotions = result['emotion']
                     dominant = result['dominant_emotion']
                     details += f"\n  🎭 EMOTION: {dominant.upper()}\n"
                     details += f"     Confidence: {emotions[dominant]:.1f}%\n"
                     
-                    # All emotions
                     details += f"\n  📊 All Emotions:\n\n"
                     for emotion, score in sorted(emotions.items(), key=lambda x: x[1], reverse=True):
                         bar = "█" * int(score / 3.5)
@@ -536,25 +850,177 @@ class ComputerVisionGUI:
                     
                     details += "\n"
             else:
-                details += "\n⚠ No faces detected.\n\n"
-                details += "Tips:\n"
-                details += "  • Use an image with visible faces\n"
-                details += "  • Ensure better lighting/resolution\n"
-                details += "  • Use front-facing faces\n"
+                details += "\n⚠ No faces detected.\n"
             
             details += f"\n{'='*60}\n"
             details += f"✓ Output saved: {output_path.name}\n"
             
-            self.details_text.insert(1.0, details)
+            self.root.after(0, lambda: self.details_text.insert("1.0", details))
             self.log_status("✓ Detection complete!")
             
         except Exception as e:
             raise Exception(f"Face detection error: {str(e)}")
+    
+    def classify_image(self):
+        """Perform image classification"""
+        try:
+            if self.classifier is None:
+                self.log_status("Loading ResNet50 classifier...")
+                self.classifier = ImageClassifier()
+                self.classifier.load_model()
+                self.log_status("✓ Model loaded")
+            
+            self.log_status("Classifying image...")
+            
+            filename = os.path.basename(self.current_image_path)
+            output_path = self.classification_output / f"classified_{filename}"
+            
+            predictions = self.classifier.classify_image(self.current_image_path)
+            self.classifier.process_image_with_labels(self.current_image_path, output_path, predictions)
+            
+            self.current_output_path = str(output_path)
+            
+            self.root.after(0, lambda: self.display_image(str(output_path), self.output_image_label, is_output=True))
+            
+            self.log_status(f"✓ Classification complete!")
+            
+            details = f"{'='*60}\n"
+            details += f"   IMAGE CLASSIFICATION RESULTS\n"
+            details += f"{'='*60}\n\n"
+            details += f"Top 5 Predictions:\n\n"
+            
+            for idx, (class_id, class_name, confidence) in enumerate(predictions, 1):
+                bar = "█" * int(confidence * 50)
+                details += f"  {idx}. {class_name.upper()}\n"
+                details += f"     {bar:30s} {confidence:.1%}\n\n"
+            
+            details += f"\n{'='*60}\n"
+            details += f"✓ Output saved: {output_path.name}\n"
+            
+            self.root.after(0, lambda: self.details_text.insert("1.0", details))
+            
+        except Exception as e:
+            raise Exception(f"Classification error: {str(e)}")
+    
+    def segment_image(self):
+        """Perform image segmentation"""
+        try:
+            if self.segmenter is None:
+                self.log_status("Loading segmentation model...")
+                self.segmenter = ImageSegmenter()
+                self.log_status("✓ Model loaded")
+            
+            self.log_status("Segmenting image...")
+            
+            filename = os.path.basename(self.current_image_path)
+            output_path = self.segmentation_output / f"segmented_{filename}"
+            
+            num_segments = self.segmenter.process_image(self.current_image_path, output_path)
+            
+            self.current_output_path = str(output_path)
+            
+            self.root.after(0, lambda: self.display_image(str(output_path), self.output_image_label, is_output=True))
+            
+            self.log_status(f"✓ Found {num_segments} segments")
+            
+            details = f"{'='*60}\n"
+            details += f"   IMAGE SEGMENTATION RESULTS\n"
+            details += f"{'='*60}\n\n"
+            details += f"Total segments detected: {num_segments}\n\n"
+            details += "Segmentation technique: Color-based region detection\n"
+            details += "Output: Side-by-side comparison with original\n"
+            details += f"\n{'='*60}\n"
+            details += f"✓ Output saved: {output_path.name}\n"
+            
+            self.root.after(0, lambda: self.details_text.insert("1.0", details))
+            
+        except Exception as e:
+            raise Exception(f"Segmentation error: {str(e)}")
+    
+    def recognize_traffic_signs(self):
+        """Perform traffic sign recognition"""
+        try:
+            if self.traffic_recognizer is None:
+                self.log_status("Loading traffic sign recognizer...")
+                self.traffic_recognizer = TrafficSignRecognizer()
+                self.log_status("✓ Model loaded")
+            
+            self.log_status("Recognizing traffic signs...")
+            
+            filename = os.path.basename(self.current_image_path)
+            output_path = self.traffic_output / f"detected_{filename}"
+            
+            num_signs, detections = self.traffic_recognizer.process_image(
+                self.current_image_path, output_path
+            )
+            
+            self.current_output_path = str(output_path)
+            
+            self.root.after(0, lambda: self.display_image(str(output_path), self.output_image_label, is_output=True))
+            
+            self.log_status(f"✓ Found {num_signs} traffic signs")
+            
+            details = f"{'='*60}\n"
+            details += f"   TRAFFIC SIGN RECOGNITION RESULTS\n"
+            details += f"{'='*60}\n\n"
+            details += f"Total signs detected: {num_signs}\n\n"
+            
+            if num_signs > 0:
+                details += "▼ Detected Signs:\n"
+                details += "─" * 60 + "\n\n"
+                
+                for idx, det in enumerate(detections, 1):
+                    details += f"  {idx}. {det['type']}\n"
+                    details += f"     Confidence: {det['confidence']:.1%}\n"
+                    details += f"     Method: {det['method']}\n\n"
+            else:
+                details += "⚠ No traffic signs detected.\n"
+            
+            details += f"\n{'='*60}\n"
+            details += f"✓ Output saved: {output_path.name}\n"
+            
+            self.root.after(0, lambda: self.details_text.insert("1.0", details))
+            
+        except Exception as e:
+            raise Exception(f"Traffic sign recognition error: {str(e)}")
+    
+    def clear_all(self):
+        """Clear all images and results"""
+        self.current_image_path = None
+        self.current_output_path = None
+        
+        self.file_label.configure(text="No file selected")
+        self.input_image_label.configure(image='', text="No image loaded\n\n📁 Click 'Choose Image' to start")
+        self.output_image_label.configure(image='', text="Detection results will appear here\n\n🚀 Run detection to see results")
+        self.details_text.delete("1.0", "end")
+        self.status_text.delete("1.0", "end")
+        
+        self.detect_btn.configure(state="disabled")
+        self.status_label.configure(text="✅ Ready to detect", text_color=self.colors['success'])
+        self.status_icon.configure(text_color=self.colors['success'])
+        
+        self.log_status("🗑️ Cleared all data")
+        self.log_status("Ready for new detection")
+    
+    def run(self):
+        """Start the GUI main loop"""
+        self.log_status("🚀 Computer Vision System initialized")
+        self.log_status("Select a mode and upload an image")
+        
+        # Bring window to front
+        self.root.lift()
+        self.root.focus_force()
+        self.root.attributes('-topmost', True)
+        self.root.after(100, lambda: self.root.attributes('-topmost', False))
+        
+        self.root.mainloop()
+
 
 def main():
-    root = tk.Tk()
-    app = ComputerVisionGUI(root)
-    root.mainloop()
+    """Main entry point"""
+    app = ComputerVisionGUI()
+    app.run()
+
 
 if __name__ == "__main__":
     main()
