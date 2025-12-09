@@ -1,20 +1,36 @@
-# Core Computer Vision
-opencv-python>=4.8.0
+# Core Computer Vision (Optimized versions)
+opencv-python>=4.9.0
+opencv-contrib-python>=4.9.0
 numpy>=1.24.0,<2.0.0
-pillow>=10.0.0
+pillow>=10.2.0
 
-# Object Detection
-ultralytics>=8.0.0
-torch>=2.0.0
+# Object Detection (Latest YOLO with performance improvements)
+ultralytics>=8.1.0
+torch>=2.1.0
+torchvision>=0.16.0
 
-# Face/Emotion Detection
-deepface>=0.0.79
+# Face/Emotion Detection (Optimized)
+deepface>=0.0.89
+tf-keras>=2.15.0
+retina-face>=0.0.13
 
-# Image Classification & Segmentation
+# Image Classification & Segmentation (Optimized TensorFlow)
 tensorflow>=2.15.0
-tf-keras>=2.16.0
 
-# GUI
+# Advanced Segmentation Algorithms
+scikit-image>=0.22.0
+scipy>=1.11.0
+
+# GUI (Enhanced)
+customtkinter>=5.2.0
 tkinter-tooltip>=2.1.0
+
+# Performance & Optimization
+onnxruntime>=1.16.0
+psutil>=5.9.0
+
+# Caching & Speed
+joblib>=1.3.0
+tqdm>=4.66.0
 
 # Note: tkinter comes with Python, no need to install separately
